@@ -1,70 +1,30 @@
-import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Property } from '../../nestar-api/src/libs/dto/property/property';
-import { Member } from '../../nestar-api/src/libs/dto/member/member';
-import { PropertyStatus } from '../../nestar-api/src/libs/enums/property.enum';
-import { MemberStatus, MemberType } from '../../nestar-api/src/libs/enums/member.enum';
+import { Inject, Injectable } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { MEMBER, MEMBER_SERVICE, PROPERTY, PROPERTY_SERVICE, rpcCall } from '@app/common';
+
+const BATCH_TIMEOUT_MS = 60000;
 
 @Injectable()
 export class BatchService {
-  constructor(
-    @InjectModel('Property') private readonly propertyModel: Model<Property>,
-    @InjectModel('Member') private readonly memberModel: Model<Member>,
-  ) {}
-  
-  public async batchRollback(): Promise<void> {
-    await this.propertyModel.updateMany(
-      {
-        propertyStatus: PropertyStatus.ACTIVE,
-      },
-      { propertyRank: 0 }, // majburan propertyRankni 0 ga tenglayapmiz
-    )
-    .exec();
+	constructor(
+		@Inject(PROPERTY_SERVICE) private readonly propertyClient: ClientProxy,
+		@Inject(MEMBER_SERVICE) private readonly memberClient: ClientProxy,
+	) {}
 
-    await this.memberModel.updateMany(
-      {
-        memberStatus: MemberStatus.ACTIVE,
-        memberType: MemberType.AGENT,
-      },
-      { memberRank: 0 },
-    )
-    .exec();
-  }
-  
-  public async batchTopProperties(): Promise<void> {
-    const properties: Property[] = await this.propertyModel.find(
-      {
-        propertyStatus: PropertyStatus.ACTIVE,
-      })
-      .exec();
+	public async batchRollback(): Promise<void> {
+		await rpcCall(this.propertyClient, PROPERTY.BATCH_ROLLBACK, {}, BATCH_TIMEOUT_MS);
+		await rpcCall(this.memberClient, MEMBER.BATCH_ROLLBACK, {}, BATCH_TIMEOUT_MS);
+	}
 
-    const promisedList = properties.map(async (ele: Property) => {
-      const { _id, propertyLikes, propertyViews } = ele;
-      const rank = propertyLikes * 2 + propertyViews * 1;
-      return await this.propertyModel.findByIdAndUpdate(_id, { propertyRank: rank });
-    });
-    await Promise.all(promisedList);  
-  }
-  
-  public async batchTopAgents(): Promise<void> {
-    const agents: Member[] = await this.memberModel.find(
-      {
-        memberType: MemberType.AGENT,
-        memberStatus: MemberStatus.ACTIVE,
-        memberRank: 0,
-      })
-      .exec();
+	public async batchTopProperties(): Promise<number> {
+		return await rpcCall<number>(this.propertyClient, PROPERTY.BATCH_RANK, {}, BATCH_TIMEOUT_MS);
+	}
 
-    const promisedList = agents.map(async (ele: Member) => {
-      const { _id, memberProperties, memberLikes, memberArticles, memberViews } = ele;
-      const rank = memberProperties * 5 + memberArticles * 3 + memberLikes * 2 + memberViews * 1;
-      return await this.memberModel.findByIdAndUpdate(_id, { memberRank: rank });
-    });
-    await Promise.all(promisedList); 
-  }
+	public async batchTopAgents(): Promise<number> {
+		return await rpcCall<number>(this.memberClient, MEMBER.BATCH_RANK, {}, BATCH_TIMEOUT_MS);
+	}
 
-  getHello(): string {
-    return 'Welcome to Nestar BATCH server!';
-  }
+	getHello(): string {
+		return 'Welcome to Nestar BATCH server!';
+	}
 }

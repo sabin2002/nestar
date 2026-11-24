@@ -19,6 +19,51 @@
         "tsConfigPath": "apps/nestar-api/tsconfig.app.json"
       }
     },
+    "member-service": {
+      "type": "application",
+      "root": "apps/member-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/member-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/member-service/tsconfig.app.json"
+      }
+    },
+    "property-service": {
+      "type": "application",
+      "root": "apps/property-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/property-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/property-service/tsconfig.app.json"
+      }
+    },
+    "community-service": {
+      "type": "application",
+      "root": "apps/community-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/community-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/community-service/tsconfig.app.json"
+      }
+    },
+    "social-service": {
+      "type": "application",
+      "root": "apps/social-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/social-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/social-service/tsconfig.app.json"
+      }
+    },
+    "ai-service": {
+      "type": "application",
+      "root": "apps/ai-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/ai-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/ai-service/tsconfig.app.json"
+      }
+    },
     "nestar-batch": {
       "type": "application",
       "root": "apps/nestar-batch",
@@ -26,6 +71,15 @@
       "sourceRoot": "apps/nestar-batch/src",
       "compilerOptions": {
         "tsConfigPath": "apps/nestar-batch/tsconfig.app.json"
+      }
+    },
+    "common": {
+      "type": "library",
+      "root": "libs/common",
+      "entryFile": "index",
+      "sourceRoot": "libs/common/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/common/tsconfig.lib.json"
       }
     }
   }

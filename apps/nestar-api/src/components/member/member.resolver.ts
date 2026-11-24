@@ -1,38 +1,39 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
-import { MemberService } from './member.service';
-import { UseGuards } from '@nestjs/common';
-import { AgentsInquiry, LoginInput, MemberInput, MembersInquiry } from '../../libs/dto/member/member.input';
-import { Member, Members } from '../../libs/dto/member/member';
+import { Inject, UseGuards } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { MEMBER, MEMBER_SERVICE, rpcCall } from '@app/common';
+import { AgentsInquiry, LoginInput, MemberInput, MembersInquiry } from '@app/common/dto/member/member.input';
+import { Member, Members } from '@app/common/dto/member/member';
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { AuthMember } from '../auth/decorators/authMember.decorator';
 import * as mongoose from 'mongoose';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { MemberType } from '../../libs/enums/member.enum';
+import { MemberType } from '@app/common/enums/member.enum';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { MemberUpdate } from '../../libs/dto/member/member.update';
-import { getSerialForImage, shapeIntoMongoObjectId, validMimeTypes } from '../../libs/config';
+import { MemberUpdate } from '@app/common/dto/member/member.update';
+import { getSerialForImage, shapeIntoMongoObjectId, validMimeTypes } from '@app/common/config';
 import { WithoutGuard } from '../auth/guards/without.guard';
 import { GraphQLUpload, FileUpload } from 'graphql-upload';
 import { createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
 import * as path from 'path';
-import { Message } from '../../libs/enums/common.enum';
+import { Message } from '@app/common/enums/common.enum';
 
 @Resolver()
 export class MemberResolver {
-	constructor(private readonly memberService: MemberService) {}
+	constructor(@Inject(MEMBER_SERVICE) private readonly memberClient: ClientProxy) {}
 
 	@Mutation(() => Member)
 	public async signup(@Args('input') input: MemberInput): Promise<Member> {
 		console.log('Mutation: signup');
 		// console.log('input: ', input);
-		return await this.memberService.signup(input);
+		return await rpcCall(this.memberClient, MEMBER.SIGNUP, input);
 	}
 
 	@Mutation(() => Member)
 	public async login(@Args('input') input: LoginInput): Promise<Member> {
 		console.log('Mutation: login');
-		return await this.memberService.login(input);
+		return await rpcCall(this.memberClient, MEMBER.LOGIN, input);
 	}
 
 	@UseGuards(AuthGuard)
@@ -66,7 +67,7 @@ export class MemberResolver {
 		console.log('Mutation: updateMember');
 		console.log('memberId: ', memberId);
 		delete input._id; // frontenddan kelgan id ni ochiramiz -- bu frontenddan kelgan id shunga delete qilamiz
-		return await this.memberService.updateMember(memberId, input); // memberId tokendan kelgan shu rost
+		return await rpcCall(this.memberClient, MEMBER.UPDATE, { memberId, input }); // memberId tokendan kelgan shu rost
 	}
 
 	@UseGuards(WithoutGuard)
@@ -79,7 +80,7 @@ export class MemberResolver {
 		const targetId = shapeIntoMongoObjectId(input);
 		// console.log('memberId: ', memberId);
 
-		return await this.memberService.getMember(memberId, targetId);
+		return await rpcCall(this.memberClient, MEMBER.GET, { memberId, targetId });
 	}
 
 	@UseGuards(WithoutGuard)
@@ -89,7 +90,7 @@ export class MemberResolver {
 		@AuthMember('_id') memberId: mongoose.Types.ObjectId,
 	): Promise<Members> {
 		console.log('Query: getAgents');
-		return await this.memberService.getAgents(memberId, input);
+		return await rpcCall(this.memberClient, MEMBER.AGENTS, { memberId, input });
 	}
 
 
@@ -103,7 +104,7 @@ export class MemberResolver {
 	): Promise<Member> {
 		console.log("Mutation: likeTargetMember");
 		const likeRefId = shapeIntoMongoObjectId(input);
-		return await this.memberService.likeTargetMember(memberId, likeRefId);
+		return await rpcCall(this.memberClient, MEMBER.LIKE, { memberId, likeRefId });
 	}
 
 
@@ -116,7 +117,7 @@ export class MemberResolver {
 	public async getAllMembersByAdmin(@Args('input') input: MembersInquiry): Promise<Members> {
 		console.log('Query: getAllMembersByAdmin');
 
-		return await this.memberService.getAllMembersByAdmin(input);
+		return await rpcCall(this.memberClient, MEMBER.ADMIN_LIST, input);
 	}
 
 	// Authorization: ADMIN
@@ -125,7 +126,7 @@ export class MemberResolver {
 	@Mutation(() => Member)
 	public async updateMemberByAdmin(@Args('input') input: MemberUpdate): Promise<Member> {
 		console.log('Mutation: updateMemberByAdmin');
-		return await this.memberService.updateMemberByAdmin(input);
+		return await rpcCall(this.memberClient, MEMBER.ADMIN_UPDATE, input);
 	}
 
 	/** UPLOADER **/

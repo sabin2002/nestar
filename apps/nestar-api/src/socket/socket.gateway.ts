@@ -1,15 +1,31 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { AI, AI_SERVICE, rpcCall } from '@app/common';
 import { OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'ws';
 import * as Websocket from 'ws';
 import { AuthService } from '../components/auth/auth.service';
-import { Member } from '../libs/dto/member/member';
+import { Member } from '@app/common/dto/member/member';
+import { AI_TIMEOUT_MS } from '../components/ai/ai.resolver';
 
 interface MessagePayload {
 	event: string;
 	text: string;
 	memberData: Member | null;
 }
+
+interface AiPayload {
+	event: 'aiMessage' | 'aiTyping' | 'aiError';
+	text: string;
+	propertyIds?: string[];
+}
+
+interface ChatTurn {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
+const AI_HISTORY_LIMIT = 8;
 
 interface InfoPayload {
 	event: string;
@@ -24,8 +40,13 @@ export class SocketGateway implements OnGatewayInit {
 	private summaryClient: number = 0;
 	private clientAuthMap = new Map<Websocket.WebSocket, Member | null>();
 	private messageList: MessagePayload[] = [];
+	private aiHistory = new Map<Websocket.WebSocket, ChatTurn[]>(); // private AI conversation per connection
+	private aiBusy = new Set<Websocket.WebSocket>();
 
-	constructor(private authService: AuthService) {}
+	constructor(
+		private authService: AuthService,
+		@Inject(AI_SERVICE) private readonly aiClient: ClientProxy,
+	) {}
 
 	@WebSocketServer()
 	server!: Server;
@@ -80,6 +101,8 @@ export class SocketGateway implements OnGatewayInit {
 		const authMember = this.clientAuthMap.get(client) ?? null; // clientni mapdan olish, agar bo'lmasa null
 		this.summaryClient--; // total clientni kamaytirish
 		this.clientAuthMap.delete(client); // clientni mapdan o'chirish
+		this.aiHistory.delete(client);
+		this.aiBusy.delete(client);
 
 		const clientNick: string = authMember?.memberNick ?? 'Guest'; // agar member bo'lsa nickni olish, bo'lmasa Guest deb qo'yish
 		this.logger.verbose(`Disconnection [${clientNick}] & total: [${this.summaryClient}]`); // logga yozish
@@ -109,6 +132,47 @@ export class SocketGateway implements OnGatewayInit {
 		this.messageList.push(newMessage);
 		if(this.messageList.length >= 5) this.messageList.splice(0, this.messageList.length - 5); // Keep only the last 5 messages
 		this.emitMessage(newMessage);
+	}
+
+	/**
+	 * AI ASSISTANT: { event: 'ai', data: 'question' }
+	 * Only the asking client gets the answer (CLIENT strategy), it is not shown in the public live chat.
+	 */
+	@SubscribeMessage('ai')
+	public async handleAiMessage(client: Websocket.WebSocket, payload: any): Promise<void> {
+		const text = String(payload ?? '').trim();
+		if (!text) return;
+		if (this.aiBusy.has(client)) {
+			this.sendToClient(client, { event: 'aiError', text: 'Please wait for the previous answer.' });
+			return;
+		}
+
+		const authMember = this.clientAuthMap.get(client) ?? null;
+		const history = this.aiHistory.get(client) ?? [];
+		this.logger.verbose(`AI QUESTION [${authMember?.memberNick ?? 'Guest'}]: ${text}`);
+
+		this.aiBusy.add(client);
+		this.sendToClient(client, { event: 'aiTyping', text: '' });
+		try {
+			const result = await rpcCall<{ reply: string; propertyIds: string[] }>(
+				this.aiClient,
+				AI.CHAT,
+				{ message: text, history, memberNick: authMember?.memberNick ?? null },
+				AI_TIMEOUT_MS,
+			);
+			history.push({ role: 'user', content: text }, { role: 'assistant', content: result.reply });
+			this.aiHistory.set(client, history.slice(-AI_HISTORY_LIMIT));
+			this.sendToClient(client, { event: 'aiMessage', text: result.reply, propertyIds: result.propertyIds });
+		} catch (err: any) {
+			this.logger.warn(`AI error: ${err?.message}`);
+			this.sendToClient(client, { event: 'aiError', text: err?.message ?? 'AI assistant is not available.' });
+		} finally {
+			this.aiBusy.delete(client);
+		}
+	}
+
+	private sendToClient(client: Websocket.WebSocket, message: AiPayload) {
+		if (client.readyState === Websocket.OPEN) client.send(JSON.stringify(message));
 	}
 
 	private broadcastMessage(sender: Websocket.WebSocket, message: InfoPayload | MessagePayload) {

@@ -6,8 +6,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver } from '@nestjs/apollo';
 import { AppResolver } from './app.resolver';
 import { ComponentsModule } from './components/components.module';
-import { DatabaseModule } from './database/database.module';
-import { T } from './libs/types/common';
+import { T } from '@app/common/types/common';
 import { SocketModule } from './socket/socket.module';
 
 @Module({
@@ -29,8 +28,8 @@ import { SocketModule } from './socket/socket.module';
 				return graphQLFormattedError;
 			},
 		}),
-		ComponentsModule, // HTTP
-		DatabaseModule, SocketModule, // TCP
+		ComponentsModule, // GraphQL resolvers -> microservices over TCP
+		SocketModule, // WebSocket live chat + AI assistant
 	],
 	controllers: [AppController],
 	providers: [AppService, AppResolver],

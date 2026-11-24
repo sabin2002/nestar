@@ -38,7 +38,8 @@ export class BatchController {
     try {
       this.logger["context"] = BATCH_TOP_PROPERTIES;
       this.logger.debug("EXECUTED!")
-      await this.BatchService.batchTopProperties();
+      const count = await this.BatchService.batchTopProperties();
+      this.logger.debug(`ranked ${count} properties`);
     } catch (err) {
        this.logger.error(err)
     }
@@ -49,7 +50,8 @@ export class BatchController {
     try {
       this.logger["context"] = BATCH_TOP_AGENTS;
       this.logger.debug("EXECUTED!")
-      await this.BatchService.batchTopAgents();
+      const count = await this.BatchService.batchTopAgents();
+      this.logger.debug(`ranked ${count} agents`);
     } catch (err) {
       this.logger.error(err)
     }
